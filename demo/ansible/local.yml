@@ -119,7 +119,7 @@
           nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       spec:
         rules:
-        - host: cd.ccsiem.local
+        - host: cd.demo.local
           http:
             paths:
             - backend:
@@ -173,7 +173,7 @@
           nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       spec:
         rules:
-        - host: kibana.ccsiem.local
+        - host: kibana.demo.local
           http:
             paths:
             - backend:
