@@ -1,0 +1,193 @@
+---
+- hosts: all
+  tasks:
+  - name: Install Docker Repo
+    get_url:
+      url: https://download.docker.com/linux/centos/docker-ce.repo
+      dest: /etc/yum.repos.d/docker-ce.repo
+
+  - name: Install Docker
+    yum:
+      name: docker-ce
+      state: latest
+
+  - name: Start Docker
+    systemd:
+      name: docker
+      state: started
+      enabled: yes
+
+  - name: Get Kubernetes version
+    shell: curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt
+    args:
+      warn: no
+    register: K8S_VERSION
+
+  - name: Download Kubectl
+    get_url:
+      url: "https://storage.googleapis.com/kubernetes-release/release/{{ K8S_VERSION.stdout }}/bin/linux/amd64/kubectl"
+      dest: /usr/local/sbin/kubectl
+      mode: '555'
+
+  - name: argoCD Version
+    shell: curl --silent "https://api.github.com/repos/argoproj/argo-cd/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
+    args:  
+      warn: no
+    register: ARGO_VERSION
+
+  - name: Download argoCD
+    get_url:
+      url: "https://github.com/argoproj/argo-cd/releases/download/{{ ARGO_VERSION.stdout }}/argocd-linux-amd64"
+      dest: /usr/local/sbin/argocd
+      mode: '555'
+
+  - name: Download Kind cli
+    get_url:
+      url: "https://kind.sigs.k8s.io/dl/v0.9.0/kind-linux-amd64"
+      dest: /usr/local/sbin/kind
+      mode: '555'
+
+  - name: Build Cluster
+    shell: |
+      cat <<EOF | /usr/local/sbin/kind create cluster --config=-
+      kind: Cluster
+      apiVersion: kind.x-k8s.io/v1alpha4
+      nodes:
+      - role: control-plane
+        kubeadmConfigPatches:
+        - |
+          kind: InitConfiguration
+          nodeRegistration:
+            kubeletExtraArgs:
+              node-labels: "ingress-ready=true"
+        extraPortMappings:
+        - containerPort: 80
+          hostPort: 80
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 443
+          protocol: TCP
+      EOF
+
+  - name: Install ECK Operator
+    shell: /usr/local/sbin/kubectl apply -f https://download.elastic.co/downloads/eck/1.2.1/all-in-one.yaml
+
+  - name: Install Nginx Ingress
+    shell: /usr/local/sbin/kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/provider/kind/deploy.yaml
+
+  - name: Apply Nginx Patch
+    shell: |
+      /usr/local/sbin/kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/args", "value": [
+      "/nginx-ingress-controller",
+      "--election-id=ingress-controller-leader",
+      "--ingress-class=nginx",
+      "--configmap=$(POD_NAMESPACE)/ingress-nginx-controller",
+      "--validating-webhook=:8443",
+      "--validating-webhook-certificate=/usr/local/certificates/cert",
+      "--validating-webhook-key=/usr/local/certificates/key",
+      "--publish-status-address=localhost",
+      "--enable-ssl-passthrough"]}]'
+
+  - name: Install Strimzi Operator
+    shell: "{{ item }}"
+    with_items:
+      - "/usr/local/sbin/kubectl create ns kafka"
+      - "/usr/local/sbin/kubectl apply -f 'https://strimzi.io/install/latest?namespace=kafka' -n kafka"
+
+  - name: Create ArgoCD Operator
+    shell: "{{ item }}"
+    with_items:
+      - "/usr/local/sbin/kubectl create ns argocd"
+      - "/usr/local/sbin/kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+
+  - name: Add Elastic Operator
+    shell: /usr/local/sbin/kubectl apply -f https://download.elastic.co/downloads/eck/1.2.1/all-in-one.yaml
+
+  - name: Wait for ArgoCD ready
+    shell: while [[ $(/usr/local/sbin/kubectl get deployment -n ingress-nginx -o jsonpath='{.items[].status.availableReplicas}') -ne "1" ]];do sleep 5; done
+
+  - name: Add ArgoCD Ingress
+    shell: |
+      cat <<EOF | /usr/local/sbin/kubectl apply -n argocd -f -
+      apiVersion: extensions/v1beta1
+      kind: Ingress
+      metadata:
+        name: argocd-server-ingress
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      spec:
+        rules:
+        - host: cd.ccsiem.local
+          http:
+            paths:
+            - backend:
+                serviceName: argocd-server
+                servicePort: https
+      EOF
+
+  - name: Add ES Cluster
+    shell: |
+      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      apiVersion: elasticsearch.k8s.elastic.co/v1
+      kind: Elasticsearch
+      metadata:
+        name: quickstart
+      spec:
+        version: 7.9.3
+        nodeSets:
+        - name: default
+          count: 1
+          config:
+            node.master: true
+            node.data: true
+            node.ingest: true
+            node.store.allow_mmap: false
+      EOF
+
+  - name: Add Kibana
+    shell: |
+      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      apiVersion: kibana.k8s.elastic.co/v1
+      kind: Kibana
+      metadata:
+        name: quickstart
+      spec:
+        version: 7.9.3
+        count: 1
+        elasticsearchRef:
+          name: quickstart
+      EOF
+
+  - name: Add Kibana Ingress
+    shell: |
+      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      apiVersion: extensions/v1beta1
+      kind: Ingress
+      metadata:
+        name: kibana-server-ingress
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      spec:
+        rules:
+        - host: kibana.ccsiem.local
+          http:
+            paths:
+            - backend:
+                serviceName: quickstart-kb-http
+                servicePort: 5601
+      EOF
+
+
+  - name: Create some info in a readme file
+    shell: |
+      cat << EOF >> /root/README
+      Argo Username: admin
+      Argo Password $(/usr/local/sbin/kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2)
+
+      Elastic Username: elastic
+      Elastic Password: $(/usr/local/sbin/kubectl get secret quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}')
+      EOF

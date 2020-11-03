@@ -1,0 +1,9 @@
+#cloud-init
+runcmd:
+  - sed -i 's/enforcing/disabled/g' /etc/sysconfig/selinux
+  - sed -i 's/enforcing/disabled/g' /etc/selinux/config 
+  - yum -y install epel-release
+  - yum -y install git ansible wget  
+  - yum -y update
+  - echo "@reboot ansible-pull -U https://github.com/dnhodgson/carbon_arc -i demo/ansible/hosts demo/ansible/local.yml" > /var/spool/cron/root
+  - reboot
