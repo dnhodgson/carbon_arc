@@ -41,12 +41,17 @@ After completing either of the 2 install options you should now have a working d
 Use the following commands from the `root` account in your cluster to get the passwords for the root portals
 
 Elastic:
-  username: elastic
-  password: `kubectl get secret quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}'`
+
+&nbsp;&nbsp;&nbsp;&nbsp;username: elastic
+
+&nbsp;&nbsp;&nbsp;&nbsp;password: `kubectl get secret quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}'`
   
 ArgoCD:
-  username: admin
-  password: `kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2`
+
+&nbsp;&nbsp;&nbsp;&nbsp;username: admin
+
+&nbsp;&nbsp;&nbsp;&nbsp;password: `kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2`
+
 
 ### Web Portals
 
