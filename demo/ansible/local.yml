@@ -69,10 +69,10 @@
           protocol: TCP
         - containerPort: 30514
           hostPort: 514
-          protocol: TCP
+          protocol: UDP
         - containerPort: 31514
           hostPort: 514
-          protocol: UDP
+          protocol: TCP
         - containerPort: 30092
           hostPort: 9092
           protocol: TCP
