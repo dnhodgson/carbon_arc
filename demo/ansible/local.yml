@@ -135,10 +135,13 @@
                 serviceName: argocd-server
                 servicePort: https
       EOF
+  - name: Add Demo Namespace
+    shell: |
+      /usr/local/sbin/kubectl create ns demo
 
   - name: Add ES Cluster
     shell: |
-      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      cat <<EOF | /usr/local/sbin/kubectl apply -n demo -f -
       apiVersion: elasticsearch.k8s.elastic.co/v1
       kind: Elasticsearch
       metadata:
@@ -157,7 +160,7 @@
 
   - name: Add Kibana
     shell: |
-      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      cat <<EOF | /usr/local/sbin/kubectl -n demo apply -f -
       apiVersion: kibana.k8s.elastic.co/v1
       kind: Kibana
       metadata:
@@ -171,7 +174,7 @@
 
   - name: Add Kibana Ingress
     shell: |
-      cat <<EOF | /usr/local/sbin/kubectl apply -f -
+      cat <<EOF | /usr/local/sbin/kubectl -n demo apply -f -
       apiVersion: extensions/v1beta1
       kind: Ingress
       metadata:
@@ -189,8 +192,7 @@
                 serviceName: quickstart-kb-http
                 servicePort: 5601
       EOF
-
-
+      
   - name: Create some info in a readme file
     shell: |
       cat << EOF >> /root/README
