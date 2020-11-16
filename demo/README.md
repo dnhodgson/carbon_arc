@@ -37,11 +37,11 @@ ansible-pull -U https://github.com/dnhodgson/carbon_arc -i demo/ansible/hosts de
 After completing either of the 2 install options you should now have a working demo environment. Run the following to create a DEMO file in root home comtaining the usernames/passwords
 
 ```
-cat << EOF >> /root/README	
+cat << EOF >> /root/DEMO	
 Argo Username: admin	
 Argo Password $(/usr/local/sbin/kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2)	
 Elastic Username: elastic	
-Elastic Password: $(/usr/local/sbin/kubectl get secret quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}')	
+Elastic Password: $(/usr/local/sbin/kubectl get secret -n demo quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}')	
 EOF
 ```
 
