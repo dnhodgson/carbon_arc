@@ -192,13 +192,3 @@
                 serviceName: quickstart-kb-http
                 servicePort: 5601
       EOF
-      
-  - name: Create some info in a readme file
-    shell: |
-      cat << EOF >> /root/README
-      Argo Username: admin
-      Argo Password $(/usr/local/sbin/kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2)
-
-      Elastic Username: elastic
-      Elastic Password: $(/usr/local/sbin/kubectl get secret quickstart-es-elastic-user -o go-template='{{.data.elastic | base64decode}}')
-      EOF
